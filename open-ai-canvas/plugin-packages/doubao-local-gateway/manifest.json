@@ -1,0 +1,257 @@
+{
+  "apiVersion": "yingce.plugin/v2",
+  "id": "doubao-local-gateway",
+  "name": "Doubao Local Gateway",
+  "version": "1.0.0",
+  "author": "影策 / 本地网关",
+  "description": "本地豆包网关（127.0.0.1:9090）异步视频任务协议插件。提交走 POST /v1/video/tasks，轮询走 GET /v1/video/tasks/{id}。",
+  "documentation": "# Doubao Local Gateway\n\n该插件对接本机运行的豆包 Web 网关（`doubao-web-mcp`），用于在影策画布中调用网关的视频生成能力。\n\n## 协议身份\n\n- 插件 ID：`doubao-local-gateway`\n- Provider ID：`doubao-local-gateway`\n- 能力：`video`\n- 默认 Base URL：`http://127.0.0.1:9090/v1`\n- 鉴权：`none`（网关在本机回环地址上不校验 API Key）\n- 创建：`POST /v1/video/tasks`\n- 查询：`GET /v1/video/tasks/{{taskId}}`\n\n## 与上游的字段差异\n\n网关的同步端点 `POST /v1/video/generations` 会阻塞到成片返回且不提供 task id，影策的视频协议全部是「提交 + 轮询」两阶段，因此这里对接网关新增的异步兼容层。\n\n| 统一字段 | 上游字段 | 说明 |\n| --- | --- | --- |\n| `model` | `model` | 网关档位键，例如 `seedance_v2.0`（Fast）。 |\n| `prompt` | `prompt` | 视频提示词。 |\n| `duration` | `duration` | 整数秒；网关按档位限制 4–15 秒（2.5 档到 30 秒）。 |\n| `aspectRatio` | `ratio` | 网关使用 `ratio`，取值 `auto/3:4/4:3/9:16/16:9/1:1/21:9`。 |\n| `resolution` | `resolution` | 只有 2.5 档接受 `720p`/`1080p`；其余档位传了会报错，故用 `$omitEmpty` 且不设默认值。 |\n| `images` | `images` | 参考图数组，网关接受 http(s) URL、data URI 或本机路径。 |\n| `videos` | `ref_video` | 仅 `seedance_v2.0`（Fast）开放 1 个参考视频。 |\n| `generateAudio` | `generate_audio` | 网关当前不消费该字段，保留透传。 |\n\n## 响应映射\n\n网关异步任务返回 `{id, object, status, progress, video_url, data:[{video_url,url}], message, error:{message}}`。状态取值 `queued/processing/succeeded/failed`，与影策的状态归一表一一对应。\n\n成片 URL 指向网关自身的 `/media/...`，属于临时地址，因此标记 `resultEphemeral`，由宿主立即下载持久化。\n\n## 运行前提\n\n1. 网关需以 `GATEWAY_NO_PAUSE=1` 常驻运行并监听 9090。\n2. 影策后端需放行回环地址：`CANVAS_ALLOWED_PRIVATE_UPSTREAM_HOSTS=127.0.0.1`，否则创建渠道与请求上游都会被 SSRF 防护拒绝。\n3. 网关的 `GATE_LOCK` 单账号串行，异步任务的并发由 `GATEWAY_TASK_CONCURRENCY` 控制（默认 1）。\n",
+  "permissions": [
+    "generation.run",
+    "media.read"
+  ],
+  "configuration": {
+    "fields": []
+  },
+  "contributes": {
+    "providers": [
+      {
+        "id": "doubao-local-gateway",
+        "label": "Doubao Local Gateway",
+        "capabilities": [
+          "video"
+        ],
+        "scopes": [
+          "admin.system-channel",
+          "user.custom-channel",
+          "canvas",
+          "creation",
+          "agent"
+        ],
+        "baseUrl": "http://127.0.0.1:9090/v1",
+        "requiresPublicMediaUrls": false,
+        "auth": {
+          "type": "none"
+        },
+        "parameters": [
+          {
+            "name": "model",
+            "type": "string",
+            "required": true,
+            "mapping": "model",
+            "description": "网关视频档位键，例如 seedance_v2.0（Fast）。"
+          },
+          {
+            "name": "prompt",
+            "type": "string",
+            "required": true,
+            "mapping": "prompt",
+            "description": "视频生成提示词。"
+          },
+          {
+            "name": "images",
+            "type": "media[]",
+            "required": false,
+            "mapping": "images",
+            "description": "参考图，支持 http(s) URL、data URI 或本机路径。"
+          },
+          {
+            "name": "videos",
+            "type": "media[]",
+            "required": false,
+            "mapping": "ref_video",
+            "description": "参考视频，仅 seedance_v2.0（Fast）开放 1 个。"
+          },
+          {
+            "name": "audios",
+            "type": "media[]",
+            "required": false,
+            "mapping": "unsupported",
+            "description": "网关当前不支持参考音频。"
+          },
+          {
+            "name": "duration",
+            "type": "integer",
+            "required": false,
+            "mapping": "duration",
+            "description": "视频时长秒数，网关按档位限制。"
+          },
+          {
+            "name": "aspectRatio",
+            "type": "string",
+            "required": false,
+            "mapping": "ratio",
+            "description": "画幅比例，网关字段名为 ratio。"
+          },
+          {
+            "name": "resolution",
+            "type": "string",
+            "required": false,
+            "mapping": "resolution",
+            "description": "分辨率档位，仅 2.5 档支持；为空时不发送。"
+          },
+          {
+            "name": "generateAudio",
+            "type": "boolean",
+            "required": false,
+            "mapping": "generate_audio",
+            "description": "是否生成音频，网关当前不消费。"
+          },
+          {
+            "name": "watermark",
+            "type": "boolean",
+            "required": false,
+            "mapping": "unsupported",
+            "description": "网关不提供水印开关。"
+          }
+        ],
+        "create": {
+          "method": "POST",
+          "path": "/v1/video/tasks",
+          "contentType": "application/json",
+          "body": {
+            "model": {
+              "$ref": "request.model"
+            },
+            "prompt": {
+              "$ref": "request.prompt"
+            },
+            "duration": {
+              "$if": {
+                "condition": {
+                  "$gt": [
+                    {
+                      "$ref": "request.duration"
+                    },
+                    0
+                  ]
+                },
+                "then": {
+                  "$ref": "request.duration"
+                },
+                "else": 5
+              }
+            },
+            "ratio": {
+              "$coalesce": [
+                {
+                  "$ref": "request.aspectRatio"
+                },
+                "16:9"
+              ]
+            },
+            "resolution": {
+              "$omitEmpty": {
+                "$ref": "request.resolution"
+              }
+            },
+            "images": {
+              "$omitEmpty": {
+                "$map": {
+                  "from": {
+                    "$sortByOrder": {
+                      "$ref": "request.images"
+                    }
+                  },
+                  "as": "media",
+                  "in": {
+                    "$ref": "media.value"
+                  }
+                }
+              }
+            },
+            "ref_video": {
+              "$omitEmpty": {
+                "$first": {
+                  "$map": {
+                    "from": {
+                      "$sortByOrder": {
+                        "$ref": "request.videos"
+                      }
+                    },
+                    "as": "media",
+                    "in": {
+                      "$ref": "media.value"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "poll": {
+          "method": "GET",
+          "path": "/v1/video/tasks/{{taskId}}"
+        },
+        "response": {
+          "taskId": {
+            "$coalesce": [
+              {
+                "$ref": "response.id"
+              },
+              {
+                "$ref": "response.task_id"
+              },
+              {
+                "$ref": "response.data.id"
+              }
+            ]
+          },
+          "status": {
+            "$coalesce": [
+              {
+                "$ref": "response.status"
+              },
+              {
+                "$ref": "response.state"
+              },
+              "pending"
+            ]
+          },
+          "message": {
+            "$coalesce": [
+              {
+                "$ref": "response.error.message"
+              },
+              {
+                "$ref": "response.message"
+              }
+            ]
+          },
+          "videos": {
+            "$coalesce": [
+              {
+                "$map": {
+                  "from": {
+                    "$ref": "response.data"
+                  },
+                  "as": "item",
+                  "in": {
+                    "$coalesce": [
+                      {
+                        "$ref": "item.video_url"
+                      },
+                      {
+                        "$ref": "item.url"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "$ref": "response.video_url"
+              },
+              {
+                "$ref": "response.url"
+              }
+            ]
+          },
+          "errorPaths": [
+            "error.message"
+          ],
+          "resultEphemeral": true
+        }
+      }
+    ]
+  }
+}

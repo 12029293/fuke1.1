@@ -1,0 +1,46 @@
+# ===== 依赖与构建产物 =====
+node_modules/
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# ===== 可执行文件 / 预编译二进制 =====
+*.exe
+*.exe~
+*.exe.bak
+bin/
+**/backend/server
+**/plugin-packages/*/backend/provider*
+**/plugin-packages/*.yingce-plugin
+
+# ===== 运行数据、数据库、备份 =====
+data/
+tmp/
+*.db
+*.db-shm
+*.db-wal
+*.db.backup*
+*.bak
+*.bak-*
+backups/
+
+# ===== 日志 =====
+*.log
+
+# ===== 密钥与本地配置（公开仓库必须排除）=====
+.env
+.env.*
+!.env.example
+.settings-key
+*settings-key*
+agent-test-cookies.txt
+cookies.txt
+
+# ===== 嵌套的上游仓库元数据 =====
+open-ai-canvas/.git
+open-ai-canvas/.git.upstream-bak/
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
